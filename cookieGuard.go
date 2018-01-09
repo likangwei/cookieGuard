@@ -9,6 +9,7 @@ import (
 	"github.com/op/go-logging"
 	"os"
 	"bytes"
+	"net/url"
 )
 
 var log = logging.MustGetLogger("fly")
@@ -75,15 +76,34 @@ func initConfig(){
 	}
 }
 
-func getCookies(q string)[]*Cookie{
-	var rst []*Cookie
-	for k, v := range CACHE.cookies{
-		if strings.Index(k, q) >= 0{
-			rst = append(rst, v...)
-		}
+func getFilterDomains(host string)[]string{
+	blocks := strings.Split(host, ".")
+	rst := []string{host}
+	if len(blocks) <= 2{
+		return rst
+	}
+	for i:=1; i<=len(blocks)-2; i++{
+		s := "." + strings.Join(blocks[i:len(blocks)], ".")
+		rst = append(rst, s)
 	}
 	return rst
 }
+
+func getCookies(u string)([]*Cookie, error){
+	var rst []*Cookie
+	url, err := url.Parse(u)
+	if err != nil{
+		return rst, err
+	}
+	host := url.Host
+	filters := getFilterDomains(host)
+	fmt.Println("filters", filters)
+	for _, f := range filters{
+		rst = append(rst, CACHE.cookies[f]...)
+	}
+	return rst, nil
+}
+
 
 type ProxyRequest struct{
 	Url string `json: url`
@@ -100,7 +120,13 @@ func proxyHttpRequest(proxyReq *ProxyRequest)(*http.Response, error){
 		fmt.Println(err.Error())
 		return nil, err
 	}
-	cookies := getCookies(".worktile.com")
+
+	cookies, err := getCookies(proxyReq.Url)
+
+	if err != nil{
+		return nil, err
+	}
+
 	for i:=0; i<len(cookies); i++{
 		c := cookies[i]
 		ck := http.Cookie{
@@ -134,7 +160,7 @@ func main() {
 
 	router.GET("/cookies", func(c *gin.Context) {
 		q := c.Query("q")
-		rst := getCookies(q)
+		rst, _ := getCookies(q)
 		c.JSON(http.StatusOK, rst)
 	})
 
@@ -156,13 +182,18 @@ func main() {
 		err := c.BindJSON(req)
 		resp, err := proxyHttpRequest(req)
 		buf := new(bytes.Buffer)
+		msg := ""
 		if(err != nil){
 			fmt.Println(err.Error())
+			msg = err.Error()
 		}else{
 			buf.ReadFrom(resp.Body)
 			fmt.Println("response==>", buf.String())
 		}
-		c.JSON(http.StatusOK, gin.H{"success": err == nil, "proxy": req, "resp": buf.String()})
+		c.JSON(http.StatusOK, gin.H{"success": err == nil,
+									"proxy": req,
+									"msg": msg,
+									"resp": buf.String()})
 	})
 
 	router.Run(":9090")
